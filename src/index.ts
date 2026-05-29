@@ -2,6 +2,7 @@ import "dotenv/config";
 import Fastify from "fastify";
 import { registerOsuFile } from "./routes/osu-file";
 import { registerBeatmapApi } from "./routes/beatmap-api";
+import { registerCover } from "./routes/cover";
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -15,6 +16,7 @@ const app = Fastify({
 
 registerOsuFile(app);
 registerBeatmapApi(app);
+registerCover(app);
 
 const host = process.env.HOST ?? "0.0.0.0";
 const port = parseInt(process.env.PORT ?? "3030", 10);
