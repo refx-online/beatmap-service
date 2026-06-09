@@ -1,6 +1,6 @@
 import { BaseMirror } from "../base";
 import { MirrorCapability, type OsuFileOptions, type BeatmapMetadataOptions, type MirrorResult } from "../types";
-import { md5 } from "../../beatmap";
+import { md5 } from "../../core/beatmap";
 import { config } from "../../config";
 
 export class OldPpyMirror extends BaseMirror {

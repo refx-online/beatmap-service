@@ -1,6 +1,7 @@
 import { config } from "../config";
 import type { IMirrorClient, MirrorCapability, OsuFileOptions, BeatmapMetadataOptions, MirrorResult } from "./types";
 import { OldPpyMirror } from "./clients/old-ppy";
+import { OsuV2Mirror } from "./clients/osu-v2";
 import { CatboyMirror } from "./clients/catboy";
 import { NerinyanMirror } from "./clients/nerinyan";
 import { DirectMirror } from "./clients/direct";
@@ -18,6 +19,7 @@ export class MirrorsManager {
   constructor() {
     const allMirrors: IMirrorClient[] = [
       new OldPpyMirror(),
+      new OsuV2Mirror(),
       new CatboyMirror(),
       new NerinyanMirror(),
       new DirectMirror(),
@@ -30,7 +32,9 @@ export class MirrorsManager {
     });
 
     if (config.useMirrorOnly) {
-      this.clients = this.clients.filter((mirror) => mirror.config.name !== "old.ppy.sh");
+      this.clients = this.clients.filter(
+        (mirror) => mirror.config.name !== "old.ppy.sh" && mirror.config.name !== "osu.ppy.sh/v2"
+      );
     }
 
     if (this.clients.length === 0) {

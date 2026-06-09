@@ -4,6 +4,8 @@ export const config = {
   beatmapsPath: process.env.BEATMAPS_PATH ?? "/srv/root/.data/osu",
   osuMirrorUrl: (process.env.OSU_MIRROR_URL ?? "https://old.ppy.sh/osu").replace(/\/$/, ""),
   osuApiKey: process.env.OSU_API_KEY ?? "",
+  osuClientId: process.env.OSU_CLIENT_ID ?? "",
+  osuClientSecret: process.env.OSU_CLIENT_SECRET ?? "",
   useMirrorOnly: process.env.USE_MIRROR_ONLY === "true",
   mirrorsToIgnore: (process.env.MIRRORS_TO_IGNORE ?? "")
     .split(",")

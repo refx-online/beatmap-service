@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { config } from "./config";
-import { MirrorsManager } from "./mirrors/manager";
+import { config } from "../config";
+import { MirrorsManager } from "../mirrors/manager";
 
 const PRIVATE_MAP_THRESHOLD = 1_000_000_000;
 
@@ -134,4 +134,3 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
 
   return fetched;
 }
-

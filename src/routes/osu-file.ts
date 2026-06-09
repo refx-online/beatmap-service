@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { getOsuFile } from "../beatmap";
+import { getOsuFile } from "../core/beatmap";
 
 interface OsuFileQuery {
   md5?: string;

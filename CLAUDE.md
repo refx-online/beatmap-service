@@ -19,14 +19,10 @@ Single Fastify service (TypeScript) that acts as a `.osu` file cache and beatmap
 
 **Entry:** `src/index.ts` — registers three route groups, starts server.
 
-**`src/beatmap.ts` — core logic**
+**`src/core/` — shared helpers**
 
-`getOsuFile(beatmapId, expectedMd5?)` resolves `.osu` files via a three-tier waterfall:
-1. Local disk (`BEATMAPS_PATH/{id}.osu`)
-2. Cloudflare R2 (`osu/{id}.osu`) — only if `R2_BUCKET` is set and not `"none"`
-3. Mirror fetch (via `MirrorsManager`) — result written back to both local and R2
-
-Beatmaps with `id >= 1_000_000_000` are rejected (private map threshold). Files are validated by checking for `"osu file format v14"` in the first 100 bytes. MD5 mismatch on local/R2 causes a re-fetch from mirror.
+- `beatmap.ts` — core beatmap logic: `getOsuFile()` three-tier waterfall (local disk → R2 → mirrors), format validation, MD5 checking
+- `auth.ts` — `OsuOAuthClient` singleton: fetches and caches OAuth2 tokens for the official osu! API v2
 
 **`src/mirrors/` — multi-mirror service layer**
 
@@ -34,8 +30,9 @@ Pattern adapted from [Observatory](https://github.com/osu-atri/observatory). Sup
 
 - `types.ts` — `MirrorCapability` enum (per-mirror abilities), `IMirrorClient` interface, shared option/result types
 - `base.ts` — `BaseMirror` abstract class with `fetchBuffer()` / `fetchJson()` helpers and timeout handling
-- `manager.ts` — `MirrorsManager` class: instantiates all mirrors, filters by `MIRRORS_TO_IGNORE`, provides fallback loops for `getOsuFile()` and `getBeatmapMetadata()`
+- `manager.ts` — `MirrorsManager` class: instantiates all mirrors, filters by `MIRRORS_TO_IGNORE`, uses `Promise.any()` for parallel racing (all mirrors tried simultaneously, first success wins)
 - `clients/old-ppy.ts` — OldPpyMirror: downloads `.osu` files from `old.ppy.sh/osu/` + official API metadata (`/api/get_beatmaps`, requires `OSU_API_KEY`)
+- `clients/osu-v2.ts` — OsuV2Mirror: beatmap metadata only via official API v2 (`GET /beatmaps/{id}`, requires `OSU_CLIENT_ID` + `OSU_CLIENT_SECRET`, OAuth2 with token caching)
 - `clients/catboy.ts` — CatboyMirror: downloads `.osu` files from `catboy.best/osu/` (download only)
 - `clients/nerinyan.ts` — NerinyanMirror: downloads `.osu` files + beatmap metadata (`/v1/get_beatmaps`) from `api.nerinyan.moe/`
 - `clients/direct.ts` — DirectMirror: downloads `.osu` files + beatmap metadata (`/api/get_beatmaps`) from `osu.direct/`
@@ -67,9 +64,11 @@ Pattern adapted from [Observatory](https://github.com/osu-atri/observatory). Sup
 | `BEATMAPS_PATH` | `/srv/root/.data/osu` | shared volume with omajinai/recalculate |
 | `OSU_MIRROR_URL` | `https://old.ppy.sh/osu` | legacy single-mirror URL (kept for backward compat) |
 | `OSU_API_KEY` | _(empty)_ | if set and `USE_MIRROR_ONLY=false`, metadata uses official API first, then mirrors on failure |
+| `OSU_CLIENT_ID` | _(empty)_ | OAuth2 client ID for official API v2 access (osu.ppy.sh/v2 mirror) |
+| `OSU_CLIENT_SECRET` | _(empty)_ | OAuth2 client secret for official API v2 access |
 | `USE_MIRROR_ONLY` | `false` | if `true`, skip official API and use mirrors only for metadata |
 | `MIRROR_ENDPOINT` | `https://catboy.best` | legacy fallback metadata source |
 | `MIRRORS_TO_IGNORE` | _(empty)_ | comma-separated mirror names to disable: `old.ppy.sh, nerinyan.moe` |
 | `R2_BUCKET` | _(empty)_ | set to `"none"` or leave empty to disable R2 |
 
-Mirror names in `MIRRORS_TO_IGNORE`: `old.ppy.sh` (or `old`), `catboy.best` (or `catboy`), `nerinyan.moe` (or `nerinyan`), `osu.direct` (or `direct`).
+Mirror names in `MIRRORS_TO_IGNORE`: `old.ppy.sh` (or `old`), `osu.ppy.sh/v2` (or `v2`), `catboy.best` (or `catboy`), `nerinyan.moe` (or `nerinyan`), `osu.direct` (or `direct`).
