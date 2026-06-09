@@ -3,10 +3,12 @@ import path from "path";
 import crypto from "crypto";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { config } from "./config";
+import { MirrorsManager } from "./mirrors/manager";
 
 const PRIVATE_MAP_THRESHOLD = 1_000_000_000;
 
 let s3: S3Client | null = null;
+let mirrorsManager: MirrorsManager | null = null;
 
 function getS3(): S3Client | null {
   if (!config.r2.bucket || config.r2.bucket === "none") return null;
@@ -80,15 +82,17 @@ function saveToLocal(beatmapId: number, data: Buffer): void {
   fs.writeFileSync(localPath(beatmapId), data);
 }
 
-async function fetchFromMirror(beatmapId: number): Promise<Buffer | null> {
-  const url = `${config.osuMirrorUrl}/${beatmapId}`;
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    if (!res.ok) return null;
-    return Buffer.from(await res.arrayBuffer());
-  } catch {
-    return null;
+function getMirrorsManager(): MirrorsManager {
+  if (!mirrorsManager) {
+    mirrorsManager = new MirrorsManager();
   }
+  return mirrorsManager;
+}
+
+async function fetchFromMirror(beatmapId: number, expectedMd5?: string): Promise<Buffer | null> {
+  const manager = getMirrorsManager();
+  const result = await manager.getOsuFile({ beatmapId, expectedMd5 });
+  return result.success ? result.data : null;
 }
 
 export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promise<Buffer | null> {
@@ -119,13 +123,11 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
     }
   }
 
-  // 3. mirror fetch
-  const fetched = await fetchFromMirror(beatmapId);
+  // 3. mirror fetch (with MD5 validation already handled in fetchFromMirror)
+  const fetched = await fetchFromMirror(beatmapId, expectedMd5);
   if (!fetched) return null;
 
   if (!isValidOsuFormat(fetched)) return null;
-
-  if (expectedMd5 && md5(fetched) !== expectedMd5) return null;
 
   saveToLocal(beatmapId, fetched);
   await saveToR2(beatmapId, fetched);
