@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { MirrorsManager } from "../mirrors/manager";
+import * as lifecycleService from "../services/lifecycle";
 
 interface BeatmapApiQuery {
   k?: string;
@@ -18,6 +19,29 @@ function getMirrorsManager(): MirrorsManager {
 }
 
 export function registerBeatmapApi(app: FastifyInstance) {
+  app.get<{ Params: { md5: string }; Querystring: { filename?: string } }>(
+    "/v1/beatmap/:md5",
+    async (req, reply) => {
+      const { md5 } = req.params;
+      const { filename } = req.query;
+
+      const result = await lifecycleService.getBeatmapByMd5(md5, filename);
+
+      if (result.status === -1) {
+        return reply.code(200).send("-1|false");
+      }
+
+      if (result.status === 1) {
+        return reply.code(200).send("1|false");
+      }
+
+      return reply.code(200).send({
+        status: result.status,
+        beatmap: result.beatmap,
+      });
+    }
+  );
+
   app.get<{ Querystring: BeatmapApiQuery }>("/v1/get_beatmaps", async (req, reply) => {
     const { h, s, b } = req.query;
 

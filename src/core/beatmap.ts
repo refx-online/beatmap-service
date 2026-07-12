@@ -34,7 +34,7 @@ function localPath(beatmapId: number): string {
 }
 
 function isValidOsuFormat(data: Buffer): boolean {
-  return data.slice(0, 100).toString("utf8").toLowerCase().includes("osu file format v14");
+  return data.slice(0, 100).toString("utf8").toLowerCase().includes("osu file format v");
 }
 
 export function md5(data: Buffer): string {
@@ -99,13 +99,14 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
   if (beatmapId >= PRIVATE_MAP_THRESHOLD) return null;
 
   const filePath = localPath(beatmapId);
+  let cachedFallback: Buffer | null = null;
 
   // 1. local disk
   if (fs.existsSync(filePath)) {
     const data = fs.readFileSync(filePath);
     if (isValidOsuFormat(data)) {
       if (!expectedMd5 || md5(data) === expectedMd5) return data;
-      // md5 mismatch — fall through to re-fetch
+      cachedFallback = data;
     } else {
       fs.rmSync(filePath, { force: true });
     }
@@ -119,15 +120,15 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
         saveToLocal(beatmapId, r2Data);
         return r2Data;
       }
-      // md5 mismatch — fall through to re-fetch
+      cachedFallback = r2Data;
     }
   }
 
   // 3. mirror fetch (with MD5 validation already handled in fetchFromMirror)
   const fetched = await fetchFromMirror(beatmapId, expectedMd5);
-  if (!fetched) return null;
+  if (!fetched) return cachedFallback;
 
-  if (!isValidOsuFormat(fetched)) return null;
+  if (!isValidOsuFormat(fetched)) return cachedFallback;
 
   saveToLocal(beatmapId, fetched);
   await saveToR2(beatmapId, fetched);

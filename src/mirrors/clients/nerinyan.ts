@@ -34,12 +34,14 @@ export class NerinyanMirror extends BaseMirror {
     if (options.expectedMd5) {
       const hash = md5(result.data);
       if (hash !== options.expectedMd5) {
+        console.log(`[nerinyan] MD5 mismatch: beatmap=${options.beatmapId}, expected=${options.expectedMd5}, actual=${hash}`);
         return {
           success: false,
           data: null,
           error: "MD5 mismatch",
         };
       }
+      console.log(`[nerinyan] MD5 match: beatmap=${options.beatmapId}, hash=${hash}`);
     }
 
     return result;

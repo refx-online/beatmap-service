@@ -2,7 +2,6 @@ export const config = {
   port: parseInt(process.env.PORT ?? "3030", 10),
   host: process.env.HOST ?? "0.0.0.0",
   beatmapsPath: process.env.BEATMAPS_PATH ?? "/srv/root/.data/osu",
-  osuMirrorUrl: (process.env.OSU_MIRROR_URL ?? "https://old.ppy.sh/osu").replace(/\/$/, ""),
   osuApiKey: process.env.OSU_API_KEY ?? "",
   osuClientId: process.env.OSU_CLIENT_ID ?? "",
   osuClientSecret: process.env.OSU_CLIENT_SECRET ?? "",
@@ -16,5 +15,12 @@ export const config = {
     accessKey: process.env.R2_ACCESS_KEY ?? "",
     secretKey: process.env.R2_SECRET_KEY ?? "",
     bucket: process.env.R2_BUCKET ?? "",
+  },
+  mysql: {
+    host: process.env.MYSQL_HOST ?? "localhost",
+    port: parseInt(process.env.MYSQL_PORT ?? "3306", 10),
+    user: process.env.MYSQL_USER ?? "root",
+    password: process.env.MYSQL_PASSWORD ?? "",
+    database: process.env.MYSQL_DATABASE ?? "bancho",
   },
 };

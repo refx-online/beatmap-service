@@ -92,7 +92,7 @@ export class MirrorsManager {
 
     const promises = clients.map(async (client) => {
       const result = await client.getBeatmapMetadata(options);
-      if (result.success && result.data) {
+      if (result.success && result.data && (!Array.isArray(result.data) || result.data.length > 0)) {
         return { data: result.data, source: client.config.name, success: true };
       }
       throw new Error(`${client.config.name}: ${result.error ?? "unknown error"}`);
