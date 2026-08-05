@@ -15,9 +15,15 @@ No test runner configured.
 
 ## Architecture
 
-Single Fastify service (TypeScript) that acts as a `.osu` file cache and beatmap metadata proxy for the re;fx stack.
+Fastify service (TypeScript) that validates beatmap existence via MySQL, caches `.osu` files, and proxies beatmap metadata for the re;fx stack.
 
 **Entry:** `src/index.ts` — registers three route groups, starts server.
+
+**Database & Repository layer:**
+
+- `src/db.ts` — MySQL connection pool with `fetchOne()` / `fetchAll()` query helpers
+- `src/repositories/beatmap.ts` — queries `maps` table via `fetchByMd5()` / `fetchByFilename()`
+- `src/services/lifecycle.ts` — `getBeatmapByMd5()` checks DB for beatmap existence, validates local file MD5, fetches via core layer if needed
 
 **`src/core/` — shared helpers**
 
@@ -50,6 +56,7 @@ Pattern adapted from [Observatory](https://github.com/osu-atri/observatory). Sup
 4. Register instance in `MirrorsManager` constructor
 
 **Routes:**
+- `GET /v1/beatmap/:md5?filename=` — checks beatmap existence via DB, validates local file MD5; returns `-1|false` (unsubmitted), `1|false` (update required/md5 mismatch), or `{status, beatmap}` (found + valid)
 - `GET /v1/get-osu/:id?md5=` — returns raw `.osu` file bytes
 - `GET /v1/ensure-osu/:id?md5=` — checks existence, returns `{ok: true}` (used by omajinai/recalculate to warm cache)
 - `GET /v1/get_beatmaps?h=&s=&b=` — proxies beatmap metadata via `MirrorsManager`. **Rotation:** tries mirrors in order (old.ppy.sh/official API first if `OSU_API_KEY` set and `USE_MIRROR_ONLY=false`, then catboy, osulabs, direct) with automatic fallback until one succeeds.
@@ -62,6 +69,11 @@ Pattern adapted from [Observatory](https://github.com/osu-atri/observatory). Sup
 | Var | Default | Notes |
 |---|---|---|
 | `BEATMAPS_PATH` | `/srv/root/.data/osu` | shared volume with omajinai/recalculate |
+| `MYSQL_HOST` | `localhost` | MySQL server host |
+| `MYSQL_PORT` | `3306` | MySQL server port |
+| `MYSQL_USER` | `root` | MySQL user |
+| `MYSQL_PASSWORD` | _(empty)_ | MySQL password |
+| `MYSQL_DATABASE` | `bancho` | MySQL database name (contains `maps` table) |
 | `OSU_MIRROR_URL` | `https://old.ppy.sh/osu` | legacy single-mirror URL (kept for backward compat) |
 | `OSU_API_KEY` | _(empty)_ | if set and `USE_MIRROR_ONLY=false`, metadata uses official API first, then mirrors on failure |
 | `OSU_CLIENT_ID` | _(empty)_ | OAuth2 client ID for official API v2 access (osu.ppy.sh/v2 mirror) |

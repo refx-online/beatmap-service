@@ -1,6 +1,7 @@
 import * as beatmapRepo from "../repositories/beatmap.js";
 import { getOsuFile } from "../core/beatmap.js";
 import { config } from "../config.js";
+import { MirrorsManager } from "../mirrors/manager.js";
 import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -13,6 +14,38 @@ interface BeatmapResponse {
 
 async function calculateMd5(buffer: Buffer): Promise<string> {
   return crypto.createHash("md5").update(buffer).digest("hex");
+}
+
+function parseOsuApiResponse(data: any): beatmapRepo.Beatmap | null {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  const map = data[0];
+  const filename = `${map.artist} - ${map.title} (${map.creator}) [${map.version}].osu`;
+
+  return {
+    id: parseInt(map.beatmap_id, 10),
+    set_id: parseInt(map.beatmapset_id, 10),
+    status: parseInt(map.approved, 10),
+    md5: map.file_md5,
+    artist: map.artist,
+    title: map.title,
+    version: map.version,
+    creator: map.creator,
+    filename,
+    last_update: Math.floor(new Date(map.last_update).getTime() / 1000),
+    total_length: parseInt(map.total_length, 10),
+    max_combo: parseInt(map.max_combo || "0", 10),
+    frozen: false,
+    plays: 0,
+    passes: 0,
+    mode: parseInt(map.mode, 10),
+    bpm: parseFloat(map.bpm),
+    cs: parseFloat(map.diff_size),
+    ar: parseFloat(map.diff_approach),
+    od: parseFloat(map.diff_overall),
+    hp: parseFloat(map.diff_drain),
+    diff: parseFloat(map.difficultyrating),
+  };
 }
 
 export async function getBeatmapByMd5(
@@ -30,7 +63,21 @@ export async function getBeatmapByMd5(
   }
 
   if (!beatmap) {
-    return { status: -1, message: "unsubmitted" };
+    const manager = new MirrorsManager();
+    const metadataResult = await manager.getBeatmapMetadata({ h: md5 });
+
+    if (metadataResult.success && metadataResult.data) {
+      beatmap = parseOsuApiResponse(metadataResult.data);
+
+      if (beatmap) {
+        await beatmapRepo.insertBeatmap(beatmap);
+        await getOsuFile(beatmap.id, md5);
+      } else {
+        return { status: -1, message: "unsubmitted" };
+      }
+    } else {
+      return { status: -1, message: "unsubmitted" };
+    }
   }
 
   const osuFilePath = path.join(config.beatmapsPath, `${beatmap.id}.osu`);

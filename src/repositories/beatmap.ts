@@ -76,3 +76,52 @@ export async function fetchByFilename(filename: string): Promise<Beatmap | null>
   );
   return row ? transformBeatmap(row) : null;
 }
+
+export async function insertBeatmap(beatmap: Omit<Beatmap, 'frozen' | 'plays' | 'passes'>): Promise<void> {
+  const { pool } = await import("../db.js");
+  await pool.execute(
+    `INSERT INTO maps (server, id, set_id, status, md5, artist, title, version, creator, filename,
+                       last_update, total_length, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff)
+     VALUES ('osu!', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       set_id = VALUES(set_id),
+       status = VALUES(status),
+       md5 = VALUES(md5),
+       artist = VALUES(artist),
+       title = VALUES(title),
+       version = VALUES(version),
+       creator = VALUES(creator),
+       filename = VALUES(filename),
+       last_update = VALUES(last_update),
+       total_length = VALUES(total_length),
+       max_combo = VALUES(max_combo),
+       mode = VALUES(mode),
+       bpm = VALUES(bpm),
+       cs = VALUES(cs),
+       ar = VALUES(ar),
+       od = VALUES(od),
+       hp = VALUES(hp),
+       diff = VALUES(diff)`,
+    [
+      beatmap.id,
+      beatmap.set_id,
+      beatmap.status,
+      beatmap.md5,
+      beatmap.artist,
+      beatmap.title,
+      beatmap.version,
+      beatmap.creator,
+      beatmap.filename,
+      new Date(beatmap.last_update * 1000),
+      beatmap.total_length,
+      beatmap.max_combo,
+      beatmap.mode,
+      beatmap.bpm,
+      beatmap.cs,
+      beatmap.ar,
+      beatmap.od,
+      beatmap.hp,
+      beatmap.diff,
+    ]
+  );
+}
