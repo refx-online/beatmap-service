@@ -4,6 +4,7 @@ export interface Beatmap {
   id: number;
   set_id: number;
   status: number;
+  status_mask: number;
   md5: string;
   artist: string;
   title: string;
@@ -12,6 +13,10 @@ export interface Beatmap {
   filename: string;
   last_update: number;
   total_length: number;
+  hit_length: number;
+  count_normal: number;
+  count_slider: number;
+  count_spinner: number;
   max_combo: number;
   frozen: boolean;
   plays: number;
@@ -29,6 +34,7 @@ interface BeatmapRow {
   id: number;
   set_id: number;
   status: number;
+  status_mask: number | string;
   md5: string;
   artist: string;
   title: string;
@@ -37,6 +43,10 @@ interface BeatmapRow {
   filename: string;
   last_update: number;
   total_length: number;
+  hit_length: number;
+  count_normal: number;
+  count_slider: number;
+  count_spinner: number;
   max_combo: number;
   frozen: number;
   plays: number;
@@ -53,14 +63,15 @@ interface BeatmapRow {
 function transformBeatmap(row: BeatmapRow): Beatmap {
   return {
     ...row,
+    status_mask: Number(row.status_mask),
     frozen: row.frozen === 1,
   };
 }
 
 export async function fetchByMd5(md5: string): Promise<Beatmap | null> {
   const row = await fetchOne<BeatmapRow>(
-    `SELECT id, set_id, status, md5, artist, title, version, creator, filename,
-            last_update, total_length, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff
+    `SELECT id, set_id, status, status_mask, md5, artist, title, version, creator, filename,
+            last_update, total_length, hit_length, count_normal, count_slider, count_spinner, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff
      FROM maps WHERE md5 = ?`,
     [md5]
   );
@@ -69,8 +80,8 @@ export async function fetchByMd5(md5: string): Promise<Beatmap | null> {
 
 export async function fetchByFilename(filename: string): Promise<Beatmap | null> {
   const row = await fetchOne<BeatmapRow>(
-    `SELECT id, set_id, status, md5, artist, title, version, creator, filename,
-            last_update, total_length, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff
+    `SELECT id, set_id, status, status_mask, md5, artist, title, version, creator, filename,
+            last_update, total_length, hit_length, count_normal, count_slider, count_spinner, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff
      FROM maps WHERE filename = ?`,
     [filename]
   );
@@ -80,12 +91,13 @@ export async function fetchByFilename(filename: string): Promise<Beatmap | null>
 export async function insertBeatmap(beatmap: Omit<Beatmap, 'frozen' | 'plays' | 'passes'>): Promise<void> {
   const { pool } = await import("../db.js");
   await pool.execute(
-    `INSERT INTO maps (server, id, set_id, status, md5, artist, title, version, creator, filename,
-                       last_update, total_length, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff)
-     VALUES ('osu!', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO maps (server, id, set_id, status, status_mask, md5, artist, title, version, creator, filename,
+                       last_update, total_length, hit_length, count_normal, count_slider, count_spinner, max_combo, frozen, plays, passes, mode, bpm, cs, ar, od, hp, diff)
+     VALUES ('osu!', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
        set_id = VALUES(set_id),
        status = VALUES(status),
+       status_mask = VALUES(status_mask),
        md5 = VALUES(md5),
        artist = VALUES(artist),
        title = VALUES(title),
@@ -94,6 +106,10 @@ export async function insertBeatmap(beatmap: Omit<Beatmap, 'frozen' | 'plays' | 
        filename = VALUES(filename),
        last_update = VALUES(last_update),
        total_length = VALUES(total_length),
+       hit_length = VALUES(hit_length),
+       count_normal = VALUES(count_normal),
+       count_slider = VALUES(count_slider),
+       count_spinner = VALUES(count_spinner),
        max_combo = VALUES(max_combo),
        mode = VALUES(mode),
        bpm = VALUES(bpm),
@@ -106,6 +122,7 @@ export async function insertBeatmap(beatmap: Omit<Beatmap, 'frozen' | 'plays' | 
       beatmap.id,
       beatmap.set_id,
       beatmap.status,
+      beatmap.status_mask,
       beatmap.md5,
       beatmap.artist,
       beatmap.title,
@@ -114,6 +131,10 @@ export async function insertBeatmap(beatmap: Omit<Beatmap, 'frozen' | 'plays' | 
       beatmap.filename,
       new Date(beatmap.last_update * 1000),
       beatmap.total_length,
+      beatmap.hit_length,
+      beatmap.count_normal,
+      beatmap.count_slider,
+      beatmap.count_spinner,
       beatmap.max_combo,
       beatmap.mode,
       beatmap.bpm,

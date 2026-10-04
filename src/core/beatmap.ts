@@ -99,17 +99,18 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
   if (beatmapId >= PRIVATE_MAP_THRESHOLD) return null;
 
   const filePath = localPath(beatmapId);
-  let cachedFallback: Buffer | null = null;
 
   // 1. local disk
   if (fs.existsSync(filePath)) {
     const data = fs.readFileSync(filePath);
-    if (isValidOsuFormat(data)) {
-      if (!expectedMd5 || md5(data) === expectedMd5) return data;
-      cachedFallback = data;
-    } else {
-      fs.rmSync(filePath, { force: true });
+    if (isValidOsuFormat(data) && (!expectedMd5 || md5(data) === expectedMd5)) {
+      return data;
     }
+    // Either malformed or the wrong map. Delete it rather than keep it as a
+    // fallback: it used to be stashed and returned whenever a mirror fetch
+    // failed, so one flaky mirror handed back a file we had already proven was
+    // the wrong map -- the "sometimes broken files" symptom.
+    fs.rmSync(filePath, { force: true });
   }
 
   // 2. R2
@@ -120,15 +121,15 @@ export async function getOsuFile(beatmapId: number, expectedMd5?: string): Promi
         saveToLocal(beatmapId, r2Data);
         return r2Data;
       }
-      cachedFallback = r2Data;
+      // mismatched: ignore, do not fall back to it
     }
   }
 
   // 3. mirror fetch (with MD5 validation already handled in fetchFromMirror)
   const fetched = await fetchFromMirror(beatmapId, expectedMd5);
-  if (!fetched) return cachedFallback;
+  if (!fetched) return null;
 
-  if (!isValidOsuFormat(fetched)) return cachedFallback;
+  if (!isValidOsuFormat(fetched)) return null;
 
   saveToLocal(beatmapId, fetched);
   await saveToR2(beatmapId, fetched);

@@ -27,12 +27,11 @@ export function registerBeatmapApi(app: FastifyInstance) {
 
       const result = await lifecycleService.getBeatmapByMd5(md5, filename);
 
-      if (result.status === -1) {
-        return reply.code(200).send("-1|false");
-      }
-
-      if (result.status === 1) {
-        return reply.code(200).send("1|false");
+      // forlorn matches these two exact strings; `available` is what decides
+      // them, not `status` (a ranked map's status is 1, which used to be
+      // misread as the md5-mismatch code).
+      if (!result.available) {
+        return reply.code(200).send(result.status === -1 ? "-1|false" : "1|false");
       }
 
       return reply.code(200).send({
@@ -41,6 +40,22 @@ export function registerBeatmapApi(app: FastifyInstance) {
       });
     }
   );
+
+  app.get<{ Params: { setId: string } }>("/v1/import/:setId", async (req, reply) => {
+    const setId = parseInt(req.params.setId, 10);
+    if (Number.isNaN(setId)) {
+      return reply.code(400).send({ error: "invalid beatmapset id" });
+    }
+
+    try {
+      const result = await lifecycleService.importBeatmapSet(setId);
+      app.log.info(result, "imported beatmapset");
+      return reply.send(result);
+    } catch (error) {
+      app.log.error({ error, setId }, "beatmapset import failed");
+      return reply.code(502).send({ error: String(error) });
+    }
+  });
 
   app.get<{ Querystring: BeatmapApiQuery }>("/v1/get_beatmaps", async (req, reply) => {
     const { h, s, b } = req.query;
