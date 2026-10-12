@@ -79,7 +79,22 @@ async function saveToR2(beatmapId: number, data: Buffer): Promise<void> {
 
 function saveToLocal(beatmapId: number, data: Buffer): void {
   fs.mkdirSync(config.beatmapsPath, { recursive: true });
-  fs.writeFileSync(localPath(beatmapId), data);
+
+  // Write-then-rename, not straight to the final path: a background download
+  // can now run concurrently with a foreground read, and `writeFileSync` to the
+  // live path exposes a truncated file to anyone who opens it mid-write.
+  // `rename` within one filesystem is atomic, so a reader sees the file
+  // complete or not at all -- never half of one.
+  const finalPath = localPath(beatmapId);
+  const tmpPath = `${finalPath}.${process.pid}.tmp`;
+
+  try {
+    fs.writeFileSync(tmpPath, data);
+    fs.renameSync(tmpPath, finalPath);
+  } catch (err) {
+    fs.rmSync(tmpPath, { force: true });
+    throw err;
+  }
 }
 
 function getMirrorsManager(): MirrorsManager {

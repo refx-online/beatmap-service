@@ -95,7 +95,11 @@ export async function getBeatmapByMd5(
 
       if (beatmap) {
         await beatmapRepo.insertBeatmap(beatmap);
-        await getOsuFile(beatmap.id, md5);
+        // The .osu is downloaded in the background, below, alongside every
+        // other uncached map. Awaiting it here put a mirror round trip behind
+        // every lobby map pick, which is the latency this endpoint exists to
+        // avoid -- metadata is what callers actually need to render a row.
+        startBackgroundOsuFetch(beatmap.id, md5);
       } else {
         return { status: -1, message: "unsubmitted" };
       }
@@ -114,22 +118,36 @@ export async function getBeatmapByMd5(
       return { status: beatmap.status, beatmap, available: true };
     }
   } catch (err) {
-    // file doesn't exist or can't be read, try to fetch
+    // Not cached yet (or unreadable). A background fetch is already running
+    // from the miss path above; for a map that was already in `maps` but has
+    // no file -- the case a lobby map pick actually hits -- start one now.
+    startBackgroundOsuFetch(beatmap.id, md5);
   }
 
-  const fetchedBuffer = await getOsuFile(beatmap.id, md5);
+  // Metadata is in hand and is all a caller needs to render the map, so answer
+  // now instead of blocking on a mirror. `available: false` is the honest
+  // signal that the .osu is still being fetched.
+  return { status: beatmap.status, beatmap, available: false };
+}
 
-  if (!fetchedBuffer) {
-    return { status: 1, message: "update_required", beatmap };
-  }
+/**
+ * Fetch and cache a `.osu` without making the caller wait for it.
+ *
+ * One in-flight promise per beatmap id, so N concurrent lookups of the same
+ * uncached map share one mirror fetch rather than racing N of them against the
+ * same destination file.
+ */
+const backgroundOsuFetches = new Map<number, Promise<unknown>>();
 
-  const fetchedMd5 = await calculateMd5(fetchedBuffer);
+function startBackgroundOsuFetch(beatmapId: number, md5: string): void {
+  const existing = backgroundOsuFetches.get(beatmapId);
+  if (existing) return;
 
-  if (fetchedMd5 !== md5) {
-    return { status: 1, message: "md5_mismatch", beatmap };
-  }
+  const pending = getOsuFile(beatmapId, md5)
+    .catch(() => null) // a failed warm-up is not this caller's problem
+    .finally(() => backgroundOsuFetches.delete(beatmapId));
 
-  return { status: beatmap.status, beatmap, available: true };
+  backgroundOsuFetches.set(beatmapId, pending);
 }
 
 /**
@@ -167,11 +185,10 @@ export async function importBeatmapSet(
     await beatmapRepo.insertBeatmap(beatmap);
     ids.push(beatmap.id);
 
-    try {
-      await getOsuFile(beatmap.id, beatmap.md5);
-    } catch {
-      // a missing .osu is not fatal for the metadata upsert
-    }
+    // Metadata is what a caller needs to render the set, and it is now in
+    // `maps`. The `.osu` warm-up runs in the background: awaiting it per
+    // difficulty put a full set's mirror downloads behind the response.
+    startBackgroundOsuFetch(beatmap.id, beatmap.md5);
   }
 
   return { imported: ids.length, skipped, ids };

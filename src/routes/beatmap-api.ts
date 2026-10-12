@@ -27,16 +27,20 @@ export function registerBeatmapApi(app: FastifyInstance) {
 
       const result = await lifecycleService.getBeatmapByMd5(md5, filename);
 
-      // forlorn matches these two exact strings; `available` is what decides
-      // them, not `status` (a ranked map's status is 1, which used to be
-      // misread as the md5-mismatch code).
-      if (!result.available) {
-        return reply.code(200).send(result.status === -1 ? "-1|false" : "1|false");
+      // Only a map we know nothing about collapses to the legacy wire codes.
+      // A map whose metadata resolved but whose `.osu` is still downloading in
+      // the background is returned as full JSON with `available: false`:
+      // collapsing it to `1|false` threw the metadata away, so a caller that
+      // just wanted to render a lobby row got nothing and 404'd downstream.
+      // forlorn reads `available` and maps it back to UpdateRequired.
+      if (!result.beatmap) {
+        return reply.code(200).send("-1|false");
       }
 
       return reply.code(200).send({
         status: result.status,
         beatmap: result.beatmap,
+        available: result.available === true,
       });
     }
   );
