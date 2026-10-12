@@ -2,9 +2,22 @@ import * as fs from "fs";
 import * as path from "path";
 import { config } from "../config.js";
 
-// Full .osz archives (audio included), proxied from nerinyan and cached
+// Full .osz archives (audio included), proxied from mirrors and cached
 // locally. The per-diff /v1/get-osu endpoint only serves bare .osu files,
 // which resolves lobby display but isn't playable.
+//
+// nerinyan is first because it is the fastest, but it only hosts a fraction
+// of the catalogue and rate-limits bursts -- hence its retry budget. The rest
+// are last resorts; osu.ppy.sh is the authority of last call. Every response
+// is magic-byte checked, so a mirror answering with an error page or a
+// captive-portal interstitial just counts as a miss.
+const OSZ_MIRRORS: { url: string; attempts: number }[] = [
+  { url: "https://api.nerinyan.moe/d/", attempts: 5 },
+  { url: "https://osu.direct/d/", attempts: 1 },
+  { url: "https://catboy.best/d/", attempts: 1 },
+  { url: "https://osu.ppy.sh/d/", attempts: 1 },
+];
+
 function localOszPath(setId: number): string {
   return path.join(config.beatmapsPath, "..", "osz", `${setId}.osz`);
 }
@@ -13,16 +26,13 @@ function isZip(data: Buffer): boolean {
   return data.length > 4 && data[0] === 0x50 && data[1] === 0x4b;
 }
 
-async function fetchFromNerinyan(setId: number): Promise<Buffer | null> {
-  // nerinyan rate-limits bursts and occasionally serves cloudflare
-  // challenges. retry with exponential backoff so a burst of first-time
-  // downloads (e.g. pre-warming a tournament pool) still lands.
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function fetchOne(url: string, attempts: number, setId: number): Promise<Buffer | null> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
-      const res = await fetch(`https://api.nerinyan.moe/d/${setId}`, { redirect: "follow" });
-      if (!res.ok) continue;
+      const res = await fetch(`${url}${setId}`, { redirect: "follow" });
+      if (!res.ok) break;
       const buf = Buffer.from(await res.arrayBuffer());
-      if (!isZip(buf)) continue;
+      if (!isZip(buf)) break;
       try {
         fs.mkdirSync(path.dirname(localOszPath(setId)), { recursive: true });
         fs.writeFileSync(localOszPath(setId), buf);
@@ -49,5 +59,9 @@ export async function getOszFile(setId: number): Promise<Buffer | null> {
       // fall through to refetch
     }
   }
-  return fetchFromNerinyan(setId);
+  for (const mirror of OSZ_MIRRORS) {
+    const buf = await fetchOne(mirror.url, mirror.attempts, setId);
+    if (buf) return buf;
+  }
+  return null;
 }
